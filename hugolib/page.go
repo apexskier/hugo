@@ -394,8 +394,15 @@ func (p *pageState) createRenderHooks(f output.Format) (*hooks.Render, error) {
 		return nil, err
 	}
 
+	layoutDescriptor.Kind = "render-heading"
+	headingTempl, headingTemplFound, err := p.s.Tmpl().LookupLayout(layoutDescriptor, f)
+	if err != nil {
+		return nil, err
+	}
+
 	var linkRenderer hooks.LinkRenderer
 	var imageRenderer hooks.LinkRenderer
+	var headingRenderer hooks.LinkRenderer
 
 	if linkTemplFound {
 		linkRenderer = contentLinkRenderer{
@@ -413,9 +420,18 @@ func (p *pageState) createRenderHooks(f output.Format) (*hooks.Render, error) {
 		}
 	}
 
+	if headingTemplFound {
+		headingRenderer = contentLinkRenderer{
+			templateHandler: p.s.Tmpl(),
+			Provider: headingTempl.(tpl.Info),
+			templ: headingTempl,
+		}
+	}
+
 	return &hooks.Render{
 		LinkRenderer:  linkRenderer,
 		ImageRenderer: imageRenderer,
+		HeadingRenderer: headingRenderer,
 	}, nil
 }
 

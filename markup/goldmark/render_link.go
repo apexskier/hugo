@@ -82,6 +82,7 @@ func (r *linkRenderer) SetOption(name renderer.OptionName, value interface{}) {
 func (r *linkRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindLink, r.renderLink)
 	reg.Register(ast.KindImage, r.renderImage)
+	reg.Register(ast.KindHeading, r.renderHeading)
 }
 
 // Fall back to the default Goldmark render funcs. Method below borrowed from:
@@ -109,6 +110,32 @@ func (r *linkRenderer) renderDefaultImage(w util.BufWriter, source []byte, node 
 		_, _ = w.WriteString(">")
 	}
 	return ast.WalkSkipChildren, nil
+}
+
+// Fall back to the default Goldmark render funcs. Method below borrowed from:
+// https://github.com/yuin/goldmark/blob/b611cd333a492416b56aa8d94b04a67bf0096ab2/renderer/html/html.go#L202
+func (r *linkRenderer) renderDefaultHeading(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Heading)
+	if entering {
+		_, _ = w.WriteString("<h")
+		_ = w.WriteByte("0123456"[n.Level])
+		if n.Attributes() != nil {
+			// https://github.com/yuin/goldmark/blob/b611cd333a492416b56aa8d94b04a67bf0096ab2/renderer/html/html.go#L507
+			for _, attr := range node.Attributes() {
+				_, _ = w.WriteString(" ")
+				_, _ = w.Write(attr.Name)
+				_, _ = w.WriteString(`="`)
+				_, _ = w.Write(util.EscapeHTML(attr.Value.([]byte)))
+				_ = w.WriteByte('"')
+			}
+		}
+		_ = w.WriteByte('>')
+	} else {
+		_, _ = w.WriteString("</h")
+		_ = w.WriteByte("0123456"[n.Level])
+		_, _ = w.WriteString(">\n")
+	}
+	return ast.WalkContinue, nil
 }
 
 // Fall back to the default Goldmark render funcs. Method below borrowed from:
@@ -170,7 +197,6 @@ func (r *linkRenderer) renderImage(w util.BufWriter, source []byte, node ast.Nod
 	ctx.AddIdentity(h.ImageRenderer.GetIdentity())
 
 	return ast.WalkContinue, err
-
 }
 
 func (r *linkRenderer) renderLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -210,7 +236,45 @@ func (r *linkRenderer) renderLink(w util.BufWriter, source []byte, node ast.Node
 	ctx.AddIdentity(h.LinkRenderer.GetIdentity())
 
 	return ast.WalkContinue, err
+}
 
+func (r *linkRenderer) renderHeading(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Heading)
+	var h *hooks.Render
+
+	ctx, ok := w.(*renderContext)
+	if ok {
+		h = ctx.RenderContext().RenderHooks
+		ok = h != nil && h.ImageRenderer != nil
+	}
+
+	if !ok {
+		return r.renderDefaultHeading(w, source, node, entering)
+	}
+
+	if entering {
+		// Store the current pos so we can capture the rendered text.
+		ctx.pos = ctx.Buffer.Len()
+		return ast.WalkContinue, nil
+	}
+
+	text := ctx.Buffer.Bytes()[ctx.pos:]
+	ctx.Buffer.Truncate(ctx.pos)
+
+	err := h.HeadingRenderer.Render(
+		w,
+		linkContext{
+			page:        ctx.DocumentContext().Document,
+			destination: string("#todo"), // TODO: Generate # ref
+			title:       string(text),
+			text:        string(text),
+			plainText:   string(n.Text(source)),
+		},
+	)
+
+	ctx.AddIdentity(h.HeadingRenderer.GetIdentity())
+
+	return ast.WalkContinue, err
 }
 
 type links struct {

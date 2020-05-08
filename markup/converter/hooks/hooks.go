@@ -28,8 +28,9 @@ type LinkContext interface {
 }
 
 type Render struct {
-	LinkRenderer  LinkRenderer
-	ImageRenderer LinkRenderer
+	LinkRenderer    LinkRenderer
+	ImageRenderer   LinkRenderer
+	HeadingRenderer LinkRenderer
 }
 
 func (r *Render) Eq(other interface{}) bool {
@@ -46,6 +47,10 @@ func (r *Render) Eq(other interface{}) bool {
 	}
 
 	if r.LinkRenderer.GetIdentity() != ro.LinkRenderer.GetIdentity() {
+		return false
+	}
+
+	if r.HeadingRenderer.GetIdentity() != ro.HeadingRenderer.GetIdentity() {
 		return false
 	}
 
